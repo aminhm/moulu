@@ -189,7 +189,6 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
     });
   }
 
-
   void _changeRoleCount(RoleCatalogEntry entry, int delta) {
     final current = _selectedRoleCounts[entry.key] ?? 0;
     final next = (current + delta).clamp(0, entry.maxCount(_playerCount));
@@ -685,18 +684,26 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
       final step = _currentNightStep!;
       final selectedTargets =
           _pendingNightTargets[step.actor.id] ?? const <String>[];
-      final availableTargets = _aliveAssignments
-          .where(
-            (assignment) =>
-                assignment.id != step.actor.id || step.actor.role.canTargetSelf,
-          )
-          .toList();
+      final availableTargets = _aliveAssignments.where((assignment) {
+        if (assignment.id != step.actor.id) {
+          return true;
+        }
+        if (!step.actor.role.canTargetSelf) {
+          return false;
+        }
+        if (step.actor.role.actionType == RoleActionType.save &&
+            _usedDoctorSelfSave.contains(step.actor.id)) {
+          return false;
+        }
+        return true;
+      }).toList();
       return _NightWizardSection(
         key: const ValueKey('night-wizard'),
         nightNumber: _nightNumber,
         stepIndex: _nightStepIndex,
         totalSteps: _nightSteps.length,
         actor: step.actor,
+        doctorSelfSaveUsed: _usedDoctorSelfSave.contains(step.actor.id),
         selectedTargetIds: selectedTargets,
         selectedGunTypes:
             _pendingNightGunTypes[step.actor.id] ?? const <String, GunType>{},
@@ -1067,6 +1074,7 @@ class _NightWizardSection extends StatelessWidget {
     required this.stepIndex,
     required this.totalSteps,
     required this.actor,
+    required this.doctorSelfSaveUsed,
     required this.selectedTargetIds,
     required this.selectedGunTypes,
     required this.availableTargets,
@@ -1079,6 +1087,7 @@ class _NightWizardSection extends StatelessWidget {
   final int stepIndex;
   final int totalSteps;
   final RoleAssignment actor;
+  final bool doctorSelfSaveUsed;
   final List<String> selectedTargetIds;
   final Map<String, GunType> selectedGunTypes;
   final List<RoleAssignment> availableTargets;
@@ -1133,6 +1142,18 @@ class _NightWizardSection extends StatelessWidget {
             '$rangeText انتخاب کن. ${actor.role.stepHint}',
             style: const TextStyle(color: Color(0xFFC6CCE9), height: 1.6),
           ),
+          if (actor.role.actionType == RoleActionType.save &&
+              doctorSelfSaveUsed)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'این دکتر قبلا یک بار خودش را نجات داده و دیگر نمی‌تواند خودش را انتخاب کند.',
+                style: TextStyle(
+                  color: Color(0xFFFFD68A),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
           const SizedBox(height: 18),
           Wrap(
             spacing: 10,
@@ -2411,14 +2432,15 @@ const doctor = RoleSpec(
   name: 'دکتر',
   team: Team.city,
   summary: 'هر شب یک نفر را نجات می‌دهد.',
-  highlight: 'می‌تواند خودش را هم انتخاب کند.',
+  highlight: 'فقط یک بار در کل بازی می‌تواند خودش را نجات دهد.',
   accent: Color(0xFF56E39F),
   wakeOrder: 7,
   actionType: RoleActionType.save,
   minTargets: 1,
   maxTargets: 1,
   canTargetSelf: true,
-  stepHint: 'بازیکنی که می‌خواهی نجات بدهی را انتخاب کن.',
+  stepHint:
+      'بازیکنی که می‌خواهی نجات بدهی را انتخاب کن. خودنجات فقط یک بار مجاز است.',
 );
 
 const detective = RoleSpec(
@@ -2486,15 +2508,16 @@ const interrogator = RoleSpec(
   key: 'interrogator',
   name: 'بازپرس',
   team: Team.city,
-  summary: 'دو بازیکن را برای بازپرسی انتخاب می‌کند.',
-  highlight: 'فقط ثبت هدف‌ها انجام می‌شود.',
+  summary: 'یک بار در کل بازی دو بازیکن را برای بازپرسی انتخاب می‌کند.',
+  highlight: 'بعد از یک استفاده، دیگر در فاز شب بیدار نمی‌شود.',
   accent: Color(0xFFFFD166),
   wakeOrder: 8,
   actionType: RoleActionType.interrogate,
   minTargets: 2,
   maxTargets: 2,
   canTargetSelf: false,
-  stepHint: 'دو نفر را برای بازپرسی انتخاب کن.',
+  stepHint:
+      'دو نفر را برای بازپرسی انتخاب کن. این قابلیت فقط یک بار در کل بازی قابل استفاده است.',
 );
 
 const gunner = RoleSpec(
