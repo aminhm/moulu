@@ -71,7 +71,7 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
   Map<String, Map<String, GunType>> _pendingNightGunTypes = {};
   List<NightReport> _nightReports = [];
   Set<String> _usedOneShotAbilities = <String>{};
-  Set<String> _usedDoctorSelfSave = <String>{};
+  Map<String, int> _doctorSelfSaveUses = <String, int>{};
 
   bool get _isNightInProgress =>
       _nightStepIndex >= 0 && _nightStepIndex < _nightSteps.length;
@@ -171,7 +171,7 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
     _pendingNightGunTypes = {};
     _nightReports = [];
     _usedOneShotAbilities = <String>{};
-    _usedDoctorSelfSave = <String>{};
+    _doctorSelfSaveUses = <String, int>{};
     _nightNumber = 1;
     if (!keepNames) {
       for (var i = 0; i < _controllers.length; i++) {
@@ -243,7 +243,7 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
       _pendingNightGunTypes = {};
       _nightReports = [];
       _usedOneShotAbilities = <String>{};
-      _usedDoctorSelfSave = <String>{};
+      _doctorSelfSaveUses = <String, int>{};
       _nightNumber = 1;
     });
   }
@@ -457,7 +457,7 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
 
     final nextStates = Map<String, PlayerLifeStatus>.from(_playerStates);
     final nextOneShot = Set<String>.from(_usedOneShotAbilities);
-    final nextDoctorSelfSave = Set<String>.from(_usedDoctorSelfSave);
+    final nextDoctorSelfSaveUses = Map<String, int>.from(_doctorSelfSaveUses);
     for (final id in eliminatedIds) {
       nextStates[id] = PlayerLifeStatus.eliminated;
     }
@@ -467,18 +467,24 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
           _pendingNightTargets[actor.id] ?? const <String>[];
       if (actor.role.actionType == RoleActionType.interrogate &&
           selectedTargetIds.isNotEmpty) {
-        nextOneShot.add(actor.id);
+        final anySelectedTargetEliminated = selectedTargetIds.any(
+          (targetId) => eliminatedIds.contains(targetId),
+        );
+        if (!anySelectedTargetEliminated) {
+          nextOneShot.add(actor.id);
+        }
       }
       if (actor.role.actionType == RoleActionType.save &&
           selectedTargetIds.contains(actor.id)) {
-        nextDoctorSelfSave.add(actor.id);
+        nextDoctorSelfSaveUses[actor.id] =
+            (nextDoctorSelfSaveUses[actor.id] ?? 0) + 1;
       }
     }
 
     setState(() {
       _playerStates = nextStates;
       _usedOneShotAbilities = nextOneShot;
-      _usedDoctorSelfSave = nextDoctorSelfSave;
+      _doctorSelfSaveUses = nextDoctorSelfSaveUses;
       _nightReports = [
         NightReport(
           nightNumber: _nightNumber,
@@ -692,7 +698,7 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
           return false;
         }
         if (step.actor.role.actionType == RoleActionType.save &&
-            _usedDoctorSelfSave.contains(step.actor.id)) {
+            (_doctorSelfSaveUses[step.actor.id] ?? 0) >= 2) {
           return false;
         }
         return true;
@@ -703,7 +709,7 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
         stepIndex: _nightStepIndex,
         totalSteps: _nightSteps.length,
         actor: step.actor,
-        doctorSelfSaveUsed: _usedDoctorSelfSave.contains(step.actor.id),
+        doctorSelfSaveUses: _doctorSelfSaveUses[step.actor.id] ?? 0,
         selectedTargetIds: selectedTargets,
         selectedGunTypes:
             _pendingNightGunTypes[step.actor.id] ?? const <String, GunType>{},
@@ -1074,7 +1080,7 @@ class _NightWizardSection extends StatelessWidget {
     required this.stepIndex,
     required this.totalSteps,
     required this.actor,
-    required this.doctorSelfSaveUsed,
+    required this.doctorSelfSaveUses,
     required this.selectedTargetIds,
     required this.selectedGunTypes,
     required this.availableTargets,
@@ -1087,7 +1093,7 @@ class _NightWizardSection extends StatelessWidget {
   final int stepIndex;
   final int totalSteps;
   final RoleAssignment actor;
-  final bool doctorSelfSaveUsed;
+  final int doctorSelfSaveUses;
   final List<String> selectedTargetIds;
   final Map<String, GunType> selectedGunTypes;
   final List<RoleAssignment> availableTargets;
@@ -1143,11 +1149,11 @@ class _NightWizardSection extends StatelessWidget {
             style: const TextStyle(color: Color(0xFFC6CCE9), height: 1.6),
           ),
           if (actor.role.actionType == RoleActionType.save &&
-              doctorSelfSaveUsed)
+              doctorSelfSaveUses > 0)
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                'این دکتر قبلا یک بار خودش را نجات داده و دیگر نمی‌تواند خودش را انتخاب کند.',
+                'این دکتر قبلا یک بار خودش را نجات داده و هنوز یک خودنجات دیگر هم دارد.',
                 style: TextStyle(
                   color: Color(0xFFFFD68A),
                   fontWeight: FontWeight.w700,
@@ -2432,7 +2438,7 @@ const doctor = RoleSpec(
   name: 'دکتر',
   team: Team.city,
   summary: 'هر شب یک نفر را نجات می‌دهد.',
-  highlight: 'فقط یک بار در کل بازی می‌تواند خودش را نجات دهد.',
+  highlight: 'می‌تواند در کل بازی دو بار خودش را نجات دهد.',
   accent: Color(0xFF56E39F),
   wakeOrder: 7,
   actionType: RoleActionType.save,
@@ -2440,7 +2446,7 @@ const doctor = RoleSpec(
   maxTargets: 1,
   canTargetSelf: true,
   stepHint:
-      'بازیکنی که می‌خواهی نجات بدهی را انتخاب کن. خودنجات فقط یک بار مجاز است.',
+      'بازیکنی که می‌خواهی نجات بدهی را انتخاب کن. خودنجات فقط دو بار در کل بازی مجاز است.',
 );
 
 const detective = RoleSpec(
@@ -2509,7 +2515,8 @@ const interrogator = RoleSpec(
   name: 'بازپرس',
   team: Team.city,
   summary: 'یک بار در کل بازی دو بازیکن را برای بازپرسی انتخاب می‌کند.',
-  highlight: 'بعد از یک استفاده، دیگر در فاز شب بیدار نمی‌شود.',
+  highlight:
+      'اگر یکی از هدف‌ها همان شب حذف شود، دوباره در شب بعد هم می‌تواند بازپرسی کند.',
   accent: Color(0xFFFFD166),
   wakeOrder: 8,
   actionType: RoleActionType.interrogate,
@@ -2517,7 +2524,7 @@ const interrogator = RoleSpec(
   maxTargets: 2,
   canTargetSelf: false,
   stepHint:
-      'دو نفر را برای بازپرسی انتخاب کن. این قابلیت فقط یک بار در کل بازی قابل استفاده است.',
+      'دو نفر را برای بازپرسی انتخاب کن. اگر هر دو هدف زنده بمانند، این بازپرس دیگر در شب‌های بعد بیدار نمی‌شود.',
 );
 
 const gunner = RoleSpec(
