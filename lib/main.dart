@@ -340,8 +340,10 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen>
     }
     final selected = _pendingNightTargets[step.actor.id] ?? const <String>[];
     final enoughSelected =
-        selected.length >= step.actor.role.minTargets &&
-        selected.length <= step.actor.role.maxTargets;
+        step.actor.role.actionType == RoleActionType.interrogate
+        ? selected.isEmpty || selected.length == 2
+        : selected.length >= step.actor.role.minTargets &&
+              selected.length <= step.actor.role.maxTargets;
     final gunTypes =
         _pendingNightGunTypes[step.actor.id] ?? const <String, GunType>{};
     final allGunTypesSelected =
@@ -1104,10 +1106,13 @@ class _NightWizardSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canSubmit =
-        selectedTargetIds.length >= actor.role.minTargets &&
-        selectedTargetIds.length <= actor.role.maxTargets;
-    final rangeText = actor.role.minTargets == actor.role.maxTargets
+    final canSubmit = actor.role.actionType == RoleActionType.interrogate
+        ? selectedTargetIds.isEmpty || selectedTargetIds.length == 2
+        : selectedTargetIds.length >= actor.role.minTargets &&
+              selectedTargetIds.length <= actor.role.maxTargets;
+    final rangeText = actor.role.actionType == RoleActionType.interrogate
+        ? 'صفر یا دو هدف'
+        : actor.role.minTargets == actor.role.maxTargets
         ? '${actor.role.minTargets} هدف'
         : '${actor.role.minTargets} تا ${actor.role.maxTargets} هدف';
 
@@ -1150,11 +1155,13 @@ class _NightWizardSection extends StatelessWidget {
           ),
           if (actor.role.actionType == RoleActionType.save &&
               doctorSelfSaveUses > 0)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                'این دکتر قبلا یک بار خودش را نجات داده و هنوز یک خودنجات دیگر هم دارد.',
-                style: TextStyle(
+                doctorSelfSaveUses >= 2
+                    ? 'این دکتر دو بار خودش را نجات داده و دیگر نمی‌تواند خودش را انتخاب کند.'
+                    : 'این دکتر یک بار خودش را نجات داده و فقط یک خودنجات دیگر دارد.',
+                style: const TextStyle(
                   color: Color(0xFFFFD68A),
                   fontWeight: FontWeight.w700,
                 ),
@@ -2520,11 +2527,11 @@ const interrogator = RoleSpec(
   accent: Color(0xFFFFD166),
   wakeOrder: 8,
   actionType: RoleActionType.interrogate,
-  minTargets: 2,
+  minTargets: 0,
   maxTargets: 2,
   canTargetSelf: false,
   stepHint:
-      'دو نفر را برای بازپرسی انتخاب کن. اگر هر دو هدف زنده بمانند، این بازپرس دیگر در شب‌های بعد بیدار نمی‌شود.',
+      'می‌توانی فعلا کسی را انتخاب نکنی یا دو نفر را برای بازپرسی ببندی. اگر هر دو هدف زنده بمانند، این توانایی مصرف می‌شود.',
 );
 
 const gunner = RoleSpec(
